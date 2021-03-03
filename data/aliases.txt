@@ -1,0 +1,138 @@
+# alias                 owner               obj_name             path_in_obj
+#-----------------------------------------------------------------------------------------
+# Raw event
+Run                     DAQ             Header               fRun 
+EventNumber             DAQ             Header               fEventNumber 
+NsTime                  DAQ             Header               fTime.fFromStartRunNs 
+Time                    DAQ             Header               fTime.fFromStartRunNs/1e09 
+StartRunUnixTime        DAQ             Header               fTime.fStartRunUnix 
+Channel                 DAQ             PulseInfo            fChannelId 
+IsNoise                 DAQ             PulseInfo            fMasterSample.GetIsNoise() 
+IsSignal                DAQ             PulseInfo            fMasterSample.GetIsSignal() 
+IsPulser                DAQ             PulseInfo            fMasterSample.GetIsPulser() 
+IsStabPulser            DAQ             PulseInfo            fMasterSample.GetIsStabPulser() 
+IsSide                  DAQ             PulseInfo            fMasterSample.GetIsSide() 
+
+# Detector configuration
+ADC2mV                  RunDataLoader   ChannelRunData       fADC2mV
+SamplingFrequency       RunDataLoader   ChannelRunData       fSamplingFrequency
+IsThermometer           RunDataLoader   ChannelRunData       fIsThermometer
+IsBolometer             RunDataLoader   ChannelRunData       fIsBolometer
+Tower                   RunDataLoader   ThermalDetector      fTd.fTdTower.fValue
+Floor                   RunDataLoader   ThermalDetector      fTd.fTdFloor.fValue
+Position                RunDataLoader   ThermalDetector      fTd.fTdPos.fValue
+Position_X              RunDataLoader   ThermalDetector      fTd.fTdX.fValue
+Position_Y              RunDataLoader   ThermalDetector      fTd.fTdY.fValue
+Position_Z              RunDataLoader   ThermalDetector      fTd.fTdZ.fValue
+
+# Preprocess
+Baseline                BaselineModule  BaselineData         fBaseline
+BaselineRMS             BaselineModule  BaselineData         fBaselineRMS
+BaselineSlope           BaselineModule  BaselineData         fBaselineSlope
+BaselineFlatRMS         BaselineModule  BaselineData         fBaselineFlatRMS
+FullWindowBaseline                BaselineModule_FullWindow  BaselineData         fBaseline
+FullWindowBaselineRMS             BaselineModule_FullWindow  BaselineData         fBaselineRMS
+FullWindowBaselineSlope           BaselineModule_FullWindow  BaselineData         fBaselineSlope
+FullWindowBaselineFlatRMS         BaselineModule_FullWindow  BaselineData         fBaselineFlatRMS
+MaxPosition             PulseBasicParameters        Parameters           fMaxPosition
+RiseTime                PulseBasicParameters        Parameters           fRiseTime
+DecayTime               PulseBasicParameters        Parameters           fDecayTime
+IsSaturatedLow          PulseBasicParameters        Parameters           fIsSaturatedLow
+IsSaturatedHigh         PulseBasicParameters        Parameters           fIsSaturatedHigh
+MaxBaseline             PulseBasicParameters        MaxBaseline          fValue
+MaxBaselineInWindow     PulseBasicParameters        MaxBaselineInWindow  fValue
+MaxMinInWindow          PulseBasicParameters        MaxMinInWindow       fValue
+NumberOfPulses          BCountPulses                CountPulsesData      fNumberOfPulses
+
+# optimum filter
+OF_Amplitude            COF             Amplitude            fValue
+OF_Delay                COF             OFData               fDelay
+OF_DecayTime            COF             OFData               fDecayTime
+OF_RiseTime             COF             OFData               fRiseTime
+OF_SecondAmplitude      COF             OFData               fSecondAmplitude
+OF_SecondDelay          COF             OFData               fSecondDelay
+OF_FDAmplitude          COF             OFData               fFDAmplitude
+OF_TVL                  COF             OFData               fTVL
+OF_TVR                  COF             OFData               fTVR
+OF_bls                  COF             bls                  fValue
+
+# optimum trigger analysis
+OT_ChiSquare                 OTAnalysis     FitChiSquare           fValue 
+OT_Amplitude                 OTAnalysis     Amplitude		   fValue 
+OT_Time                      OTAnalysis     FitTime                fValue 
+
+# stabilization and calibration
+StabAmplitude           CorrectAmplitudes       Amplitude            fValue
+IsStab                  FindMultipleTrendsByBruteForce  Selected         fValue
+Energy                  ApplyCalibration        Energy           fValue
+
+# ranking
+ThermistorRanking           ThermistorRanking       Rank             fValue
+
+# events relative timing
+TimeSinceEvent_SameChannel              CoincidenceTiming       Timing           fTimeSinceEvent_SameChannel
+TimeUntilEvent_SameChannel              CoincidenceTiming       Timing           fTimeUntilEvent_SameChannel
+TimeSinceEvent_DifferentChannel         CoincidenceTiming       Timing           fTimeSinceEvent_DifferentChannel
+TimeUntilEvent_DifferentChannel         CoincidenceTiming       Timing           fTimeUntilEvent_DifferentChannel
+TimeSinceHeaterEvent_SameChannel        CoincidenceTiming_Heater    Timing           fTimeSinceEvent_SameChannel
+TimeUntilHeaterEvent_SameChannel        CoincidenceTiming_Heater    Timing           fTimeUntilEvent_SameChannel
+TimeSinceHeaterEvent_DifferentChannel   CoincidenceTiming_Heater    Timing           fTimeSinceEvent_DifferentChannel
+TimeUntilHeaterEvent_DifferentChannel   CoincidenceTiming_Heater    Timing           fTimeUntilEvent_DifferentChannel
+TimeSinceSignalEvent_SameChannel        CoincidenceTiming_Signal    Timing           fTimeSinceEvent_SameChannel
+TimeUntilSignalEvent_SameChannel        CoincidenceTiming_Signal    Timing           fTimeUntilEvent_SameChannel
+TimeSinceSignalEvent_DifferentChannel   CoincidenceTiming_Signal    Timing           fTimeSinceEvent_DifferentChannel
+TimeUntilSignalEvent_DifferentChannel   CoincidenceTiming_Signal    Timing           fTimeUntilEvent_DifferentChannel
+
+#sample info
+SingleTrigger	 SampleInfoFilter	Passed	fValue
+
+# shape normalization
+NormBaselineSlope    ApplyShapeNormalization	NormPSA     fNormBaselineSlope 
+NormDecayTime	     ApplyShapeNormalization	NormPSA     fNormDecayTime	 
+NormDelay	     ApplyShapeNormalization	NormPSA     fNormDelay	 
+NormRiseTime	     ApplyShapeNormalization	NormPSA     fNormRiseTime	 
+NormTVL		     ApplyShapeNormalization	NormPSA     fNormTVL	 
+NormTVR		     ApplyShapeNormalization	NormPSA     fNormTVR	 
+
+# coincidences
+Multiplicity_RawTime        Coincidence_RawTime     CoincidenceData      fMultiplicity
+OrderInMultiple_RawTime     Coincidence_RawTime     CoincidenceData      fOrderInMultiple
+TotalEnergy_RawTime         Coincidence_RawTime     TotalEnergy		 fValue
+CoincidenceData_RawTime     Coincidence_RawTime     CoincidenceData      .
+Multiplicity_Sync           Coincidence_Sync        CoincidenceData      fMultiplicity
+OrderInMultiple_Sync        Coincidence_Sync        CoincidenceData      fOrderInMultiple
+TotalEnergy_Sync            Coincidence_Sync        TotalEnergy		 fValue
+CoincidenceData_Sync        Coincidence_Sync        CoincidenceData      .
+Multiplicity_SyncPSA           Coincidence_SyncPSA       CoincidenceData      fMultiplicity
+OrderInMultiple_SyncPSA        Coincidence_SyncPSA       CoincidenceData      fOrderInMultiple
+TotalEnergy_SyncPSA            Coincidence_SyncPSA       TotalEnergy		 fValue
+CoincidenceData_SyncPSA        Coincidence_SyncPSA       CoincidenceData      .
+
+# coincidence side
+Multiplicity_Side        SideCoincidence     CoincidenceData      fMultiplicity
+OrderInMultiple_Side     SideCoincidence     CoincidenceData      fOrderInMultiple
+TotalEnergy_Side         SideCoincidence     TotalEnergy		 fValue
+CoincidenceData_Side     SideCoincidence     CoincidenceData      .
+
+# alpha delayed coincidence
+Multiplicity_Alpha       AlphaDelayedCoincidence     CoincidenceData      fMultiplicity
+OrderInMultiple_Alpha    AlphaDelayedCoincidence     CoincidenceData      fOrderInMultiple
+TotalEnergy_Alpha        AlphaDelayedCoincidence     TotalEnergy	  fValue
+CoincidenceData_Alpha    AlphaDelayedCoincidence     CoincidenceData      .
+Mother			 FilterInInterval	     Passed		  fValue
+Daughter		 FilterResult		     Passed		  fValue
+
+# bad intervals
+RejectBadIntervals          RejectBadIntervals      Passed      fValue
+RejectBadIntervals_AntiCoincidence          RejectBadIntervals_AntiCoincidence      Passed      fValue
+
+# WoH + Decorrelation
+EnergyWoH		ApplyCalibration_WoH		Energy	fValue
+EnergyNewOF		ApplyCalibration_NewOF		Energy	fValue
+EnergyDecorrOF		ApplyCalibration_DecorrOF	Energy	fValue
+EnergyNewOFWoH		ApplyCalibration_NewOF_WoH	Energy	fValue
+EnergyDecorrOFWoH	ApplyCalibration_DecorrOF_WoH	Energy	fValue
+
+# blinding
+CryptedEnergy                 EnergyBlinding        CryptedEnergy   .
+

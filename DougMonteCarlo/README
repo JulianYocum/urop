@@ -1,0 +1,15 @@
+From Doug's Email:
+
+The are named by cluster batch-job # so I uploaded the two sets I used to make my plots:
+7487873.zip  --> Is the ppp decay files
+5884868.zip  --> is the muon files
+
+Some example filenames are:
+Join74878731_PionPlus_N1_E936.388577_C-17.65,-2.95,23.2_Qshields.npy
+Join58848681_MuonPlus_N1_E234843.015_C-58.609,124.012,34.8_D3.0,-0.989,-0.989_Qshields.npy
+The join number means that the results should be merged from any files with the same join #
+The other numbers are initial conditions provided to qsheilds before starting the simulation. 
+'C' means center/position --> '-P' in qshields
+'D' means the direction instructions.  ---> '-s' in qshields
+'E' is the starting energy ---> consistent in qshields
+(note that the direction is NOT [x,y,z] it is a weird series of flags, which can only determine azimuth ) (Also : I should probably make the file name conventions more consistent with the qsheilds)

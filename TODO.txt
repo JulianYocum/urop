@@ -1,0 +1,4 @@
+- dead channels/ noise channels
+- dead for entire dataset		!!!
+- energy distribution of events
+- baseline + max baseline distribution
