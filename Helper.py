@@ -1,90 +1,50 @@
 import numpy as np
-
-def lineplanecollision(planeNormal, planePoint, rayDirection, rayPoint, epsilon=1e-6):
-
-    ndotu = planeNormal.dot(rayDirection)
-    if abs(ndotu) < epsilon:
-        return None
-
-    t = -planeNormal.dot(rayPoint - planePoint) / ndotu
-
-    return rayPoint + t * rayDirection
+from scipy.interpolate import CubicSpline
+import numpy.ctypeslib as ctl
+import ctypes
 
 
-def linecubecollision(cubeCenter, cubeLength, rayDirection, rayPoint, epsilon=1e-6):
+def get_pwd():
+    return './'
+    return "/nfs/cuore1/scratch/yocum"
 
-    cubeCollisions = []
+def channelcollisions(line, file=None):
+    libname = 'libcoll.so'
+    libdir = get_pwd()
+    
+    lib=ctl.load_library(libname, libdir)
 
-    halfLength = cubeLength / 2.0
+    c_double_p = ctypes.POINTER(ctypes.c_double)
+    c_int_p = ctypes.POINTER(ctypes.c_int)
 
-    directions = np.array([
-        [0,0,halfLength], #up
-        [0,halfLength,0], #front
-        [halfLength,0,0], #right
-    ])
+    channelcollisions = lib.channelcollisions
+    channelcollisions.argtypes = [ctl.ndpointer(np.float64, 
+                                             flags='aligned, c_contiguous'),
+                                 c_int_p,
+                                 c_int_p,
+                                 c_double_p]
 
-    planeCollisions = []
-    for i in range(6):
-        if i >= 3:
-            faceNormal = -directions[i%3] # to get down, back, left
-        else:
-            faceNormal = directions[i]
+    #channelcollisions(np.array([1,2,3,4,5,6], dtype=np.float64))
 
-        facePoint = cubeCenter + faceNormal
+    data1 = (ctypes.c_int * 30)()
+    data2 = (ctypes.c_int * 30)()
+    data3 = (ctypes.c_double * 30)()
 
-        collision = lineplanecollision(faceNormal, facePoint, rayDirection, rayPoint)
-        if collision is not None:
-            planeCollisions.append(collision)
+    res = channelcollisions(line.astype(np.float64), 
+                            ctypes.cast(data1, c_int_p),
+                            ctypes.cast(data2, c_int_p), 
+                            ctypes.cast(data3, c_double_p))
 
-    #check if intersection is outside cube
-    for collision in planeCollisions:
+    data1 = np.array(data1)
+    data2 = np.array(data2)
+    data3 = np.array(data3)
 
-        inside = True
-        for i in range(3):
-            if collision[i] > (cubeCenter[i] + halfLength + epsilon) or collision[i] < (cubeCenter[i] - halfLength - epsilon):
-                inside = False
-
-        if inside:
-            cubeCollisions.append(collision)
-
-    return cubeCollisions
-
-
-def channelcollisions(line, coords, epsilon=1e-6):
-
-    rayDirection = line[3:]
-    rayPoint = line[:3]
-
-    #rayDirection = linepoints[1] - linepoints[0]
-    #rayPoint = linepoints[0]
-    cubeLength = 50
-
-    #start = time.time()
-
-    hit_channels = []
-    miss_channels = []
-    track_distances = []
-
-    for channel in range(1,len(coords)+1):
-        cubeCenter = coords[channel]
-
-        #check if cubeCenter is within range of line
-        CP = cubeCenter - rayPoint
-        distance_to_line = np.abs(np.linalg.norm(cross(CP,rayDirection)) / np.linalg.norm(rayDirection))
-
-        #print(distance_to_line)
-
-        if distance_to_line < cubeLength/2*np.sqrt(3) + epsilon:
-        #if distance_to_line < cubeLength*np.sqrt(3) + epsilon:
-
-            collision = linecubecollision(cubeCenter, cubeLength, rayDirection, rayPoint)
-            if len(collision) == 2:
-                hit_channels.append(channel)
-                track_distances.append(np.linalg.norm(collision[1] - collision[0]))
-            else:
-                miss_channels.append(channel)
-
-    return (hit_channels, miss_channels, track_distances)
+    hit_channels = data1[data1!=0]
+    miss_channels = data2[data2!=0]
+    track_lengths = data3[data3!=0]
+    
+    return (list(hit_channels), list(miss_channels), track_lengths)
+    
 
 
 def pts_to_line(line_pts):
@@ -120,6 +80,53 @@ def load_coords(pwd):
                 coords[int(data[0])] = (float(data[1]), float(data[2]), float(data[3]))
 
     return coords
+
+def make_pdf(bins_file, values_file, domain_range=None):
+
+    bins = np.genfromtxt(bins_file, delimiter=',')
+    domain = (bins[0:-1] + bins[1:]) / 2
+    values = np.genfromtxt(values_file, delimiter=',')
+    values = values / sum(values)
+
+    #print(domain, values)
+    
+    spline = CubicSpline(domain, values)
+    
+    if domain_range:
+        def pdf(x):
+            result = spline(x)
+            result[(x<domain_range[0]) | (x>domain_range[1])] = 1e-12
+            return result
+        return pdf
+    
+    return spline
+
+def make_inverse_cdf(bins_file, values_file):
+
+    bins = np.genfromtxt(bins_file, delimiter=',')
+    domain = (bins[0:-1] + bins[1:]) / 2
+    pdf_values = np.genfromtxt(values_file, delimiter=',')
+    pdf_values = pdf_values / sum(pdf_values)
+
+    cdf_values = pdf_values * 0
+    for i in range(len(pdf_values)):
+        cdf_values[i] = pdf_values[:i+1].sum()
+
+    #bin_width = bins[1] - bins[0]
+
+    spline = CubicSpline(cdf_values, domain)
+    
+    return spline
+
+
+def ptsfromline(pts, linepts):
+
+    a = linepts[np.newaxis].T[:3]
+    b = linepts[np.newaxis].T[3:]
+
+    d = np.linalg.norm(np.cross(pts - a, pts-b, axis=0), axis=0) / np.linalg.norm(b-a, axis=0)
+
+    return d
 
     
 # manually do crossproduct to avoid numpy overhead for small vectors

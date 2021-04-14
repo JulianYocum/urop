@@ -14,27 +14,30 @@ import sys
 
 from sklearn.metrics import r2_score
 
-#from pymoo.algorithms.unsga3 import UNSGA3
-#from pymoo.algorithms.nsga2 import NSGA2
 from pymoo.factory import get_sampling, get_crossover, get_mutation
 from pymoo.factory import get_termination
 from pymoo.optimize import minimize
+from pymoo.visualization.scatter import Scatter
 
-
+from pymoo.algorithms.unsga3 import UNSGA3
 from pymoo.algorithms.nsga3 import NSGA3
+from pymoo.algorithms.nsga2 import NSGA2
+
 from pymoo.factory import get_problem, get_reference_directions
 
+#from pymoo.util.termination.default import MultiObjectiveDefaultTermination
+
 from Helper import *
-from MyProblem import *
+from MyProblem import MyProblem
 
         
 class DataAnalysis():
     def __init__(self, auto=False, load=False, eventfile='', clusterfile=''): 
         
-        self.pwd = "."
-        #self.pwd = str(Path().absolute())
-        #self.pwd = "/nfs/cuore1/scratch/yocum"
+        self.pwd = get_pwd()
+        
         self.coords = load_coords(self.pwd)
+        self.dEdx_pdf = make_pdf(self.pwd + '/data/pdf/dEdx/bins_dEdx_muon.csv', self.pwd + '/data/pdf/dEdx/values_dEdx_muon.csv', domain_range=[0,190])
         
         self.noisy = []
         self.dead = []
@@ -317,7 +320,25 @@ class DataAnalysis():
 
         #return linepts
         return np.round(np.append(p, v), decimals=6)
+    
+    
+    
+#     def initial_sample(self, hit_chs, N):
+    
+#         samples = []
+#         sample_chs = np.unique(hit_chs)
+#         for i in range(N):
 
+#             ch_a, ch_b = np.random.choice(sample_chs, 2, replace=False)
+
+#             pt_a = self.coords[ch_a]
+#             pt_b = self.coords[ch_b]
+
+#             line_pts = np.concatenate((pt_a, pt_b))
+
+#             samples.append(line_pts)
+
+#         return np.array(samples)
     
     
     # takes dataframe of a single cluster and finds line of best fit
@@ -329,75 +350,145 @@ class DataAnalysis():
         non_sat_chs = cluster[cluster['IsSaturated'] == False]['Channel'].values
         non_sat_chs = non_sat_chs[np.isin(non_sat_chs, self.noisy, invert=True)]
         
-        if len(hit_chs) < 3:
+        ### HANDLE THIS MORE EXPLICITLY
+        if len(hit_chs) == 1:
             return self.basicfit(cluster)
         
         miss_chs = np.array([ch for ch in range(1,989) if ch not in hit_chs])
         miss_chs[np.isin(miss_chs, self.dead, invert=True)]
         
-        ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=200)
         
-        algorithm = NSGA3(
-            pop_size=pop_num,
-            ref_dirs=ref_dirs,
-            #n_offsprings=pop_num,
-            sampling=get_sampling("real_random"),
-            crossover=get_crossover("real_sbx", prob=1.0, eta=15),
-            mutation=get_mutation("real_pm", eta=20),
+        
+#         initial_sample =  350 * np.sqrt(3) * np.array([[-1,0,0,1,0,0],
+#                                                        [0,-1,0,0,1,0],
+#                                                        [0,0,-1,0,0,1]])
+        
+               
+        PRELIM_POP = 100
+        PRELIM_GENS = 100
+        
+        #prelim_ref_dirs = get_reference_directions("energy", 2, PRELIM_POP) #, seed=1)
+            
+        prelim_algorithm = NSGA2( #UNSGA3
+            pop_size=PRELIM_POP,
+            #ref_dirs=prelim_ref_dirs,
+            n_offsprings=PRELIM_POP,
+            sampling=get_sampling("real_random"), #self.initial_sample(hit_chs,PRELIM_POP), #
+            crossover=get_crossover("real_sbx", prob=.9, eta=15), #eta=15
+            mutation=get_mutation("real_pm", eta=20), #eta=20
             eliminate_duplicates=True
         )
         
-        termination = get_termination("n_gen", gen_num)
         
-        problem = MyProblem(hit_chs, miss_chs, non_sat_chs, cluster['SelectedEnergy'].values)
-        #problem = MyProblem()
+        prelim_problem = MyProblem(hit_chs, miss_chs, non_sat_chs, cluster['SelectedEnergy'].values, num_obj=2)
         
-        res = minimize(problem,
-                       algorithm,
-                       termination,
+        prelim_result = minimize(prelim_problem,
+                       prelim_algorithm,
+                       get_termination("n_gen", PRELIM_GENS),
                        #seed=1
                        #pf=problem.pareto_front(use_cache=False),
                        #save_history=True)
                        verbose=verbose
                       )
-        if verbose:
-            print(res.X)
-            print(res.F)
-            
-        f = 0 * res.F[:,0] + 0 * res.F[:,1] + res.F[:,2] # possibly add weights here?
-        sorted_f = sorted(f)
+        
+#         if verbose:
+#             print("prelim")
+#             print(prelim_result.X)
+#             print(prelim_result.F)
+        
+#         if verbose:
+
+#             pre_bestline = []
+#             pre_best_missed = np.inf
+#             pre_best_extra = np.inf
+
+#             for i in range(len(prelim_result.X)):
+
+#                 betterline = pts_to_line(prelim_result.X[i]) #index])
+#                 hit_channels = channelcollisions(betterline, self.coords)[0]
+#                 missed, extra = self.errorchannels(cluster, hit_channels)
+#                 #linear = prelim_result.F[i][2]
+
+#                 #print(len(missed), len(extra))#, linear)
+
+#                 if len(missed) < pre_best_missed:
+#                     pre_best_missed = len(missed)
+#                     pre_best_extra = len(extra)
+#                     pre_bestline = betterline
+
+#                 elif (len(missed) == pre_best_missed) and (len(extra) < pre_best_extra):
+#                     pre_best_extra = len(extra)
+#                     pre_bestline = betterline
+
+#             print("prelim best: ", pre_bestline, pre_best_missed, pre_best_extra)
+        
+        ########################################
+        if gen_num is not None and pop_num is not None:
+        
+            final_ref_dirs = get_reference_directions("energy", 3, pop_num) #, seed=1)
+
+            final_algorithm = UNSGA3( #NSGA3
+                pop_size=pop_num,
+                ref_dirs=final_ref_dirs,
+                sampling=prelim_result.X,
+                #n_offsprings=pop_num,
+                crossover=get_crossover("real_sbx", prob=.9, eta=15), #eta=15
+                mutation=get_mutation("real_pm", eta=20), #eta=20
+                eliminate_duplicates=True
+            )
+        
+            # set constraint for top ~5% of prelim scores
+            constraint = np.sort(prelim_result.F[:,0] + prelim_result.F[:,1])[30] #[round(len(prelim_result.F)/20)]
+            #print("constraint is: ", constraint)
+
+            final_problem = MyProblem(hit_chs, miss_chs, non_sat_chs, cluster['SelectedEnergy'].values, num_obj=3, constraint=constraint)
+
+            final_result = minimize(final_problem,
+                           final_algorithm,
+                           get_termination("n_gen", gen_num),
+                           verbose=verbose
+                          )
+
+            if verbose:
+                print("final")
+                #print(final_result.X)
+                #print(final_result.F)
+        
+        else:
+            final_result = None
         
         bestline = []
-        #bestscore = np.inf
         
         best_missed = np.inf
         best_extra = np.inf
         best_linear = np.inf
         
-        bestline = res.X[np.where(f==sorted_f[0])[0][0]]
-                
+        #         f = 0 * res.F[:,0] + 0 * res.F[:,1] + res.F[:,2] # possibly add weights here?
+#         sorted_f = sorted(f)
         
-        
-       #if sorted_f[0] != 1.0:
-       #     bestline = res.X[np.where(f==sorted_f[0])[0][0]] != 1.0
-       # 
-        #else:
-            
+        bestline = [] #res.X[np.where(f==sorted_f[0])[0][0]]
 
         #find best line out of top ten
-        for i in range(len(res.X)):
+        if not hasattr(final_result, 'X') or final_result.X is None:
+            print("Many-Objective Failure, defaulting to Multi-Objective...")
+            
+            final_result = prelim_result
+            final_result.F = np.insert(prelim_result.F, 2, np.inf, axis=1)
+        
+        for i in range(len(final_result.X)):
         #for betterline in res.X:
 
-            index = np.where(f==sorted_f[i])[0][0]
+            #index = np.where(f==sorted_f[i])[0][0]
+            
+            #print(final_result.X[i])
 
-            betterline = pts_to_line(res.X[index])
+            betterline = pts_to_line(final_result.X[i]) #index])
             hit_channels = channelcollisions(betterline, self.coords)[0]
             missed, extra = self.errorchannels(cluster, hit_channels)
-            linear = res.F[index][2]
-
-            if verbose and len(missed) == 0 and len(extra) == 0:
-                print(betterline, res.F[index])
-
+            linear = final_result.F[i][2]   #index][2]         
+           
+            if verbose:
+                print(len(missed), len(extra), linear)
 
             if len(missed) < best_missed:
                 best_missed = len(missed)
@@ -413,51 +504,11 @@ class DataAnalysis():
             elif (len(missed) == best_missed) and (len(extra) == best_extra) and (linear < best_linear):
                 best_linear = linear
                 bestline = betterline
-
-
-            #if best_missed + best_extra == 0:
-            #    bestline[3:] = bestline[3:] / np.linalg.norm(bestline[3:])
-            #    return bestline
-
-
-                
-            #print((best_missed, best_extra))
-
-            #if len(extra) + len(missed) < bestscore:
-            #    bestline = betterline
-            #    bestscore = len(extra) + len(missed)
-            #    print(bestscore)
-            
-        '''
-                
-        #normalize direction vector
-        bestline[3:] = bestline[3:] / np.linalg.norm(bestline[3:])
         
-        # at end of analysis, check if we are any better off than how we started
-        basicline = self.basicfit(cluster)
-        hit_channels = self.channelcollisions(basicline)[0]
-        basic_missed, basic_extra = self.errorchannels(cluster, hit_channels)
-        
-        # also maybe consider flagging the fact that we used basicfit line?
-        #if len(basic_extra) + len(basic_missed) < bestscore:
-        #        print("NSGA2 failure...defaulting to LSR")
-        #        bestscore = len(basic_extra) + len(basic_missed)
-        
-        
-        if len(basic_missed) < best_missed:
-            print("NSGA2 failure...defaulting to LSR")
-            best_missed = len(basic_missed)
-            best_extra = len(basic_extra)
-            bestline = basicline
-
-        elif len(basic_missed) == best_missed and len(basic_extra) < best_extra:
-            print("NSGA2 failure...defaulting to LSR")
-            best_extra = len(basic_extra)
-            bestline = basicline
-        
-        '''
+        if verbose:
+            print("final best: ", bestline, best_missed, best_extra, best_linear)
     
-        return np.round(bestline, decimals=6)
+        return np.round(bestline, decimals=6) #, prelim_result, final_result
     
         
     def dEdx(self, cluster, line, show_graph=False):
@@ -476,71 +527,14 @@ class DataAnalysis():
                 dEdxs.append(energy / track_distance)
             else:
                 dEdxs.append(np.nan)
-            
         
-#         non_sat_chs = np.array(non_sat_chs)
-
-#         data = []
-#         for i in range(len(non_sat_chs)):
-#             if non_sat_chs[i] in hit_channels:
-#                 data.append((track_distances[np.where(hit_channels == non_sat_chs[i])[0][0]], energies[i]))
-#             #else:
-#             #    data = []
-#             #    break   
-
-#         data = np.array(data)
-
-#         x = data[:,0][:,np.newaxis]            
-#         y = data[:,1]
-
-#         non_sat_dEdxs = []
-#         for xi, yi in zip(x,y):
-#             dEdx = yi / xi
-#             non_sat_dEdxs.append(dEdx)
-        
-#         all_dEdxs = []
-#         for i, row in cluster.iterrows():
-#             if not row['IsSaturated'] and row['Channel'] not in self.noisy:
-#                 all_dEdxs.append(non_sat_dEdxs.pop(0))
-#             else:
-#                 all_dEdxs.append(np.nan)
-
-
-
-
-
-                
-#         if len(data) == 0:
-#             m, r2 = (0.0, 0.0)
-#         elif len(data) == 1:
-#             m, r2 = (data[:,1][0] / data[:,0][0], 1.0)
-        
-#         else:
-#             x = data[:,0][:,np.newaxis]            
-#             y = data[:,1]
-
-#             slope, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
-#             m = slope[0]
-#             r2 = r2_score(y, data[:,0] * m)
-            
-        
-#         if show_graph:
-#             plt.scatter(data[:,0], data[:,1], color='b')
-#             #plt.plot(np.linspace(0,70), np.linspace(0,70)*m, label='r2='+str(r2))
-            
-#             plt.ylabel("Selected Energy (keV)")
-#             plt.xlabel("Path length (mm)")
-#             plt.legend()
-            
-#             plt.show()
-        
-        return dEdxs
-        #return (m, r2)
-
-    #return stats.linregress(data[:,0], data[:,1])
-
+        return np.array(dEdxs)
     
-    
+    def likelihood(self, dEdxs):
+        p_densities = self.dEdx_pdf(dEdxs[~(np.isnan(dEdxs))]/100)
+        log_densities = np.log(p_densities)
+        
+        return log_densities.sum()
     
     
     def NRMSE(self, cluster, line):
@@ -574,6 +568,7 @@ class DataAnalysis():
 
         return NRMSE
      
+        
     def errorchannels(self,cluster, hitchannels):
         
         #hitchannels = self.channelcollisions(line)[0]
@@ -634,6 +629,7 @@ class DataAnalysis():
         missingchannels = []
         zeniths = []
         azimuths = []
+        likelihoods = []
         #dEdxs = []
         #dEdx_errs = []
         
@@ -647,13 +643,13 @@ class DataAnalysis():
 
             cluster = self.eventdf[self.eventdf['Cluster'] == c]
 
-            #event and channel info
-            if len(cluster) == 1 and cluster['Channel'].values[0] == -1:
-                eventspercluster.append(0)
-                channelspercluster.append(0)
-            else:
-                eventspercluster.append(len(cluster))
-                channelspercluster.append(len(cluster['Channel'].unique()))
+#             #event and channel info
+#             if len(cluster) == 1 and cluster['Channel'].values[0] == -1:
+#                 eventspercluster.append(0)
+#                 channelspercluster.append(0)
+#             else:
+            eventspercluster.append(len(cluster))
+            channelspercluster.append(len(cluster['Channel'].unique()))
 
             #get timespread
             clustertimes = cluster['MaxTime']
@@ -663,13 +659,15 @@ class DataAnalysis():
             #get fitline
             if basicfit:
                 fitline = self.basicfit(cluster)
-            elif pop_num and gen_num:
-                fitline = self.fitline(cluster, pop_num, gen_num, verbose)
-            elif not pop_num and not gen_num:
-                fitline = self.fitline(cluster)
+#             elif pop_num is not None and gen_num is not None:
+#                 fitline = self.fitline(cluster, pop_num, gen_num, verbose)
+#            elif pop_num is None and gen_num is None:
+#                fitline = self.fitline(cluster)
+#             else:
+#                 print("Error: fitline unspecficied")
+#                 sys.exit()
             else:
-                print("Error: fitline unspecficied")
-                sys.exit()
+                fitline = self.fitline(cluster, pop_num, gen_num, verbose)
                 
             fitlines.append(fitline)
             
@@ -705,6 +703,10 @@ class DataAnalysis():
             #get energies
             dEdxs = self.dEdx(cluster, fitline)
             self.eventdf.loc[self.eventdf['Cluster'] == c, "dEdx"] = dEdxs
+            
+            #get likelihood
+            likelihoods.append(self.likelihood(dEdxs))
+            
             #dEdx, err = self.dEdx(cluster, fitline)
             #dEdxs.append(dEdx)
             #dEdx_errs.append(err)
@@ -715,7 +717,7 @@ class DataAnalysis():
         d = {'Cluster' : clusters, 'Events' : eventspercluster, 'Channels' : channelspercluster, \
             'StartTime': starttimes, 'TimeSpread' : timespreads, 'NRMSE' : NRMSE, \
              'Zenith' : zeniths,'Azimuth': azimuths, 'ExtraCh': extrachannels, 'MissingCh' : missingchannels, \
-             'Fitline' : fitlines}
+             'Likelihood' : likelihoods, 'Fitline' : fitlines}
              #'dEdx': dEdxs, 'dEdx_err': dEdx_errs, 'Fitline' : fitlines}
 
         #return newdf
@@ -724,9 +726,11 @@ class DataAnalysis():
         return self
         
         
-    def filter_fit(self, NRMSE, channels):
-        self.clusterdf = self.clusterdf[self.clusterdf['NRMSE'] < NRMSE]
-        self.clusterdf = self.clusterdf[self.clusterdf['Channels'] >= channels]
+    def filter_fit(self, NRMSE=None, channels=None):
+        if NRMSE:
+            self.clusterdf = self.clusterdf[self.clusterdf['NRMSE'] < NRMSE]
+        if channels:
+            self.clusterdf = self.clusterdf[self.clusterdf['Channels'] >= channels]
         
         if hasattr(self, 'eventdf'):
             self.eventdf = self.eventdf[self.eventdf['Cluster'].isin(self.clusterdf['Cluster'].values)]
@@ -734,8 +738,10 @@ class DataAnalysis():
         return self
 
 
-    def get_clusterdf(self):
-        return copy.deepcopy(self.clusterdf)
+    def get_clusterdf(self, fitline=True):
+        if fitline:
+            return copy.deepcopy(self.clusterdf)
+        return copy.deepcopy(self.clusterdf).iloc[:,:-1]
     
     
     def get_clusterrate(self):
@@ -804,9 +810,8 @@ class DataAnalysis():
         
         plt.show()
         
-    
         
-    def show_cluster(self, cluster_list, x1=15, x2=45):
+    def show_cluster(self, cluster_list, orientation=(15,45)):
         
         plt.figure(figsize=(10,10))
         ax = plt.axes(projection='3d')
@@ -818,10 +823,15 @@ class DataAnalysis():
             
         for c in cluster_list:
             cluster = self.eventdf[self.eventdf['Cluster'] == c]
-
-            coords = self.clustercoords(cluster)
             
-            ax.scatter3D(*coords)
+            hit_cluster = cluster[cluster['Hit'] == True]
+            miss_cluster = cluster[cluster['Hit'] == False]
+
+            hit_coords = self.clustercoords(hit_cluster)
+            miss_coords = self.clustercoords(miss_cluster)
+            
+            ax.scatter3D(*hit_coords, color='blue')
+            ax.scatter3D(*miss_coords, color='red')
 
             #line = self.fitline(cluster)
             line = self.clusterdf[self.clusterdf['Cluster'] == c]['Fitline'].values[0]
@@ -837,11 +847,11 @@ class DataAnalysis():
         ax.set_ylabel('y')
         ax.set_zlabel('z')
 
-        ax.view_init(x1, x2)
+        ax.view_init(*orientation)
         
         plt.show()
         
-    def show_simulation(self, cluster_num, x1=15, x2=45):
+    def show_simulation(self, cluster_num, orientation=(15, 45)):
         
         #linepoints = self.fitline(self.get_cluster(cluster_num))
         line = self.clusterdf[self.clusterdf['Cluster'] == cluster_num]['Fitline'].values[0]
@@ -866,7 +876,7 @@ class DataAnalysis():
         ax.set_ylabel('y')
         ax.set_zlabel('z')
 
-        ax.view_init(x1, x2)
+        ax.view_init(*orientation)
 
         plt.show()
         
