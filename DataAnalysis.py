@@ -11,6 +11,7 @@ from pathlib import Path
 import time
 import copy
 import sys
+import pickle
 
 from sklearn.metrics import r2_score
 
@@ -41,6 +42,9 @@ class DataAnalysis():
         
         self.noisy = []
         self.dead = []
+        
+        self.paretoX = dict()
+        self.paretoF = dict()
         
         if load:
             self.load_eventdf(eventfile)
@@ -77,7 +81,14 @@ class DataAnalysis():
         self.clusterdf['Fitline'] = self.clusterdf['Fitline'].apply(
             lambda rawline: np.array(rawline.strip('[]').split() if isinstance(rawline, str) else rawline, dtype=np.float64)
         )
-        
+    
+    def load_paretoX(self, file):
+        with open(file, 'rb') as f:
+            self.paretoX = pickle.load(f)
+            
+    def load_paretoF(self, file):
+        with open(file, 'rb') as f:
+            self.paretoF = pickle.load(f)
         
     def load_errorchannels(self):
         self.dead = np.genfromtxt(self.pwd + '/data/errorchannels/dead_channels.csv', delimiter=',')
@@ -93,6 +104,13 @@ class DataAnalysis():
     def save_clusterdf(self, path):
         self.clusterdf.to_csv(path, index=False)
         
+    def save_paretoX(self, path):
+        with open(path, 'wb') as f:
+            pickle.dump(self.paretoX, f, pickle.HIGHEST_PROTOCOL)
+            
+    def save_paretoF(self, path):
+        with open(path, 'wb') as f:
+            pickle.dump(self.paretoF, f, pickle.HIGHEST_PROTOCOL)
         
     def save_errorchannels(self):
         with open(self.pwd + "/data/errorchannels/dead_channels.csv", "a") as f:
@@ -342,7 +360,8 @@ class DataAnalysis():
     
     
     # takes dataframe of a single cluster and finds line of best fit
-    def fitline(self, cluster, pop_num=50, gen_num=200, verbose=False):
+    def fitline(self, cluster, pop_num=50, gen_num=200, verbose=False, save_pareto=False):
+        cluster_num = cluster['Cluster'].array[0]
         
         hit_chs = cluster['Channel'].values
         hit_chs = hit_chs[np.isin(hit_chs, self.noisy, invert=True)]
@@ -364,8 +383,8 @@ class DataAnalysis():
 #                                                        [0,0,-1,0,0,1]])
         
                
-        PRELIM_POP = 100
-        PRELIM_GENS = 100
+        PRELIM_POP = 200
+        PRELIM_GENS = 200
         
         #prelim_ref_dirs = get_reference_directions("energy", 2, PRELIM_POP) #, seed=1)
             
@@ -438,7 +457,7 @@ class DataAnalysis():
             )
         
             # set constraint for top ~5% of prelim scores
-            constraint = np.sort(prelim_result.F[:,0] + prelim_result.F[:,1])[30] #[round(len(prelim_result.F)/20)]
+            constraint = np.sort(prelim_result.F[:,0] + prelim_result.F[:,1])[80] #[round(len(prelim_result.F)/20)]
             #print("constraint is: ", constraint)
 
             final_problem = MyProblem(hit_chs, miss_chs, non_sat_chs, cluster['SelectedEnergy'].values, num_obj=3, constraint=constraint)
@@ -507,6 +526,10 @@ class DataAnalysis():
         
         if verbose:
             print("final best: ", bestline, best_missed, best_extra, best_linear)
+            
+        if save_pareto:
+            self.paretoX[cluster_num] = final_result.X
+            self.paretoF[cluster_num] = final_result.F
     
         return np.round(bestline, decimals=6) #, prelim_result, final_result
     
@@ -615,7 +638,7 @@ class DataAnalysis():
         return az
        
     
-    def make_clusterdf(self, pop_num=None, gen_num=None, basicfit = False, verbose=False):
+    def make_clusterdf(self, pop_num=None, gen_num=None, basicfit = False, verbose=False, save_pareto=False):
         # get clusters
         clusters = np.unique(self.eventdf['Cluster'])
         
@@ -667,7 +690,7 @@ class DataAnalysis():
 #                 print("Error: fitline unspecficied")
 #                 sys.exit()
             else:
-                fitline = self.fitline(cluster, pop_num, gen_num, verbose)
+                fitline = self.fitline(cluster, pop_num, gen_num, verbose, save_pareto)
                 
             fitlines.append(fitline)
             
@@ -787,7 +810,29 @@ class DataAnalysis():
         return self.clusterdf[self.clusterdf['Cluster'] == cluster_num]['Fitline'].values[0]
     
     
-    def show_channel(self, channel_list, x1=15, x2=45):
+    def plot_linear_cube(self, ax, X, Y, Z, dx=50, dy=50, dz=50, color='blue'):
+#     fig = plt.figure(figsize=(15,15))
+#     ax = Axes3D(fig)
+
+        print(X,Y,Z)
+    
+        for x,y,z in zip(X,Y,Z):
+            #print(x,y,z)
+            x,y,z = x-dx/2, y-dy/2, z-dz/2
+            xx = [x, x, x+dx, x+dx, x]
+            yy = [y, y+dy, y+dy, y, y]
+            kwargs = {'alpha': 1, 'color': color, 'linewidth' :.6}
+            ax.plot3D(xx, yy, [z]*5, **kwargs)
+            ax.plot3D(xx, yy, [z+dz]*5, **kwargs)
+            ax.plot3D([x, x], [y, y], [z, z+dz], **kwargs)
+            ax.plot3D([x, x], [y+dy, y+dy], [z, z+dz], **kwargs)
+            ax.plot3D([x+dx, x+dx], [y+dy, y+dy], [z, z+dz], **kwargs)
+            ax.plot3D([x+dx, x+dx], [y, y], [z, z+dz], **kwargs)
+            #plt.title('Cube')
+            #plt.show()
+    
+    
+    def show_channel(self, channel_list, x1=15, x2=45, show_crystals=False):
         plt.figure(figsize=(10,10))
         ax = plt.axes(projection='3d')
         ax.set_proj_type('ortho')
@@ -797,6 +842,9 @@ class DataAnalysis():
             
         coords = np.array([self.coords[ch] for ch in channel_list]).T
         ax.scatter3D(*coords)
+        
+        if show_crystals:
+            self.plot_linear_cube(ax, *coords)
         
         plt.xlim([-350,350])
         plt.ylim([-350,350])
@@ -811,7 +859,7 @@ class DataAnalysis():
         plt.show()
         
         
-    def show_cluster(self, cluster_list, orientation=(15,45)):
+    def show_cluster(self, cluster_list, orientation=(15,45), show_crystals=False):
         
         plt.figure(figsize=(10,10))
         ax = plt.axes(projection='3d')
@@ -830,14 +878,21 @@ class DataAnalysis():
             hit_coords = self.clustercoords(hit_cluster)
             miss_coords = self.clustercoords(miss_cluster)
             
-            ax.scatter3D(*hit_coords, color='blue')
-            ax.scatter3D(*miss_coords, color='red')
+            if show_crystals:
+                self.plot_linear_cube(ax, *hit_coords, color='blue')
+                self.plot_linear_cube(ax, *miss_coords, color='red')
+            else:
+                ax.scatter3D(*hit_coords, color='blue')
+                ax.scatter3D(*miss_coords, color='red')
 
             #line = self.fitline(cluster)
             line = self.clusterdf[self.clusterdf['Cluster'] == c]['Fitline'].values[0]
             linepts = line_to_pts(line)
             
             ax.plot3D(*linepts.T)
+            
+            
+
 
         plt.xlim([-350,350])
         plt.ylim([-350,350])
