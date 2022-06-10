@@ -72,7 +72,7 @@ def load_coords(pwd):
 
     coords = {}
 
-    with open(pwd + "/data/detector_positions.txt", 'r') as f:
+    with open(pwd + "../data/detector_positions.txt", 'r') as f:
         for line in f:
             data = line.split(',')
 
